@@ -11,8 +11,8 @@ int pinPowerState = 6;
 int pinRPI = 4;
 int pinMODE = 5;
 
-int pinRPM = A0;
-int pinTEMP = A1;
+int pinRPM = A2;
+int pinTEMP = A3;
 
 int currentMode = 1;
 
@@ -68,8 +68,9 @@ String getRPM() {
 }
 
 String getTemp() {
-  int tempState = analogRead(pinTEMP) / 10;
-  //TODO: some math to get correct value
+  int tempState = 1023 - analogRead(pinTEMP);
+  //at 100deg c, honda cb600 sensor returns 740... factor is 7.4
+  tempState = tempState / 7.4;
   //return tempState;
   return String(tempState);
 }
@@ -77,7 +78,7 @@ String getTemp() {
 boolean isBikeOn() {
   //pulses pin to wake up RPI when bike first turns on
   boolean pinPulse = false;
-  if(digitalRead(pinPowerState)) {
+  if( digitalRead(pinPowerState) == LOW ) {
     digitalWrite(pinRPI, HIGH);
     delay(100);
     digitalWrite(pinRPI, LOW);
@@ -86,7 +87,7 @@ boolean isBikeOn() {
   else {
     pinPulse = false;
   }
-  return (digitalRead(pinPowerState) == HIGH);
+  return (digitalRead(pinPowerState) == LOW);
 }
 
 JsonObject& buildJSON() {
