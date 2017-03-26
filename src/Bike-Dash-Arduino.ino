@@ -4,10 +4,11 @@
 #include <ArduinoJson.h>
 #include <FreqMeasure.h>
 
+
 //GPS and HW Serial Speed
 static const uint32_t GPSBaud = 9600, HWSerialBaud = 115200;
 //Pins for inputs/outputs/sofware serial
-static const int pinPowerState = 6, pinRPI = 4, pinMODE = 5, pinTPS = A2, pinTEMP = A3, RXPin = 3, TXPin =2;
+static const int pinPowerState = 7, pinRPI = 6, pinMODE = 5, pinTEMP = A3, RXPin = 4, TXPin = 3;
 //default mode is 1
 int currentMode = 1;
 
@@ -15,6 +16,8 @@ int currentMode = 1;
 TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
 
+double sum = 0;
+int count = 0;
 
 // This custom version of delay() ensures that the gps object is always being fed
 static void smartDelay(unsigned long ms) {
@@ -27,24 +30,18 @@ static void smartDelay(unsigned long ms) {
 
 //RPM of bike, using freqmeasure and pin D8
 String getRPM() {
-
-  int rpm = 0;
-
-  double sum = 0;
-  int count = 0;
-
+  float rpm = 0;
   if (FreqMeasure.available()) {
-     // average several reading together
-     sum = sum + FreqMeasure.read();
-     count = count + 1;
-     if (count > 30) {
-       //float frequency FreqMeasure.countToFrequency(sum / count);
-       rpm = (60) * FreqMeasure.countToFrequency(FreqMeasure.read());
-       sum = 0;
-       count = 0;
-     }
-   }
-
+    // average several reading together
+    sum = sum + FreqMeasure.read();
+    count = count + 1;
+    if (count > 10) {
+      float frequency = FreqMeasure.countToFrequency(sum / count);
+      rpm = frequency*30;
+      sum = 0;
+      count = 0;
+    }
+  }
   return String(rpm);
 }
 //Temperature of bike, measured using bike temp sensor and voltage divider to ADC
@@ -54,14 +51,6 @@ String getTemp() {
   tempState = tempState / 7.4;
   //return tempState;
   return String(tempState);
-}
-//Throtle position of bike, measured using bike TPS and voltage divider to ADC
-String getTPS() {
-  int tpsState = 1023 - analogRead(pinTPS);
-  //at 100deg c, honda cb600 sensor returns 740... factor is 7.4
-  //tempState = tempState / 7.4;
-  //return tempState;
-  return String(tpsState);
 }
 //returns true while pin is held high by bike being powered on, returns false otherswise.
 //pulses pin D4 when state changes from false to true
@@ -87,12 +76,15 @@ JsonObject& buildJSON() {
 
   root["status"] = "OK";
   root["mode"] = "1";//setMode();
-  root["time"] = gps.time.value();
+  root["time"] = String(gps.time.hour()) + ":" + String(gps.time.minute()) + ":" + String(gps.time.second());
 
   JsonObject& gpsData = root.createNestedObject("gpsData");
 
   gpsData["Status"] = "OFFLINE";
 
+  if(gps.charsProcessed() < 10) {
+    gpsData["Status"] = "OFFLINE - CHECK CONN";
+  }
   if(gps.sentencesWithFix() == 0) {
     gpsData["Status"] = "ONLINE - NO FIX";
   }
@@ -108,21 +100,18 @@ JsonObject& buildJSON() {
   JsonObject& bikeData = root.createNestedObject("bikeData");
   bikeData["RPM"] = getRPM();
   bikeData["Temp"] = getTemp();
-  bikeData["TPS"] = getTPS();
   bikeData["Power"] = isBikeOn();
 
   return root;
 }
 
 void setup() {
+  FreqMeasure.begin();
   Serial.begin(HWSerialBaud);
   ss.begin(GPSBaud);
 
-  FreqMeasure.begin();
-
   pinMode(pinRPI, OUTPUT);
   pinMode(pinMODE, INPUT);
-  pinMode(pinTPS, INPUT);
   pinMode(pinTEMP, INPUT);
   pinMode(pinPowerState, INPUT);
 }
