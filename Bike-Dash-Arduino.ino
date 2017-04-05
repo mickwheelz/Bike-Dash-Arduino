@@ -7,7 +7,7 @@
 //GPS and HW Serial Speed
 static const uint32_t GPSBaud = 9600, HWSerialBaud = 115200;
 //Pins for inputs/outputs/sofware serial
-static const int pinPowerState = 6, pinRPI = 7, pinMODE = 5, pinTEMP = A3, RXPin = 4, TXPin = 3;
+static const int pinPowerState = 6, pinRPI = 7, pinMODE = 5, pinTEMP = A3, RXPin = 4, TXPin = 3, pinFanState = 10, pinTPS = A2;
 //default mode is 1
 int currentMode = 1;
 
@@ -40,6 +40,13 @@ String getTemp() {
   return String(smoothTemp);
 }
 
+//Throtle position of bike in percent
+String getTPS() {
+  float tpsState = analogRead(pinTPS);
+  float smoothTPS = (as.smooth(tpsState) / 1023) * 100;
+  return String(smoothTPS);
+}
+
 //TODO:Power Management
 boolean isBikeOn() {
   return (digitalRead(pinPowerState) == LOW);
@@ -60,6 +67,10 @@ String buildTime(int offset) {
 
 }
 
+boolean isFanOn() {
+    return (digitalRead(pinFanState) == HIGH);
+}
+
 //build the JSON object to be sent over serial
 JsonObject& buildJSON() {
   
@@ -78,13 +89,15 @@ JsonObject& buildJSON() {
 
   gpsData["LAT"] = String(gps.location.lat(),6); 
   gpsData["LNG"] = String(gps.location.lng(),6);
-  gpsData["MPH"] = String(gps.speed.mph(),6); //String((random(1, 99) / 100.0) + random(1,100));
+  gpsData["MPH"] = String(gps.speed.mph(),6); //String((random(1, 99) / 100.0) + random(1,100));//
   gpsData["KPH"] = String(gps.speed.kmph(),6);
 
   JsonObject& bikeData = root.createNestedObject("bikeData");
   bikeData["RPM"] = getRPM();
   bikeData["Temp"] = getTemp(); //String((random(1, 99) / 100.0) + random(1,100));
   bikeData["Power"] = isBikeOn();
+  bikeData["Fan"] = isFanOn();
+  bikeData["TPS"] = getTPS();
 
   return root;
 }
@@ -100,6 +113,9 @@ void setup() {
   pinMode(pinMODE, INPUT);
   pinMode(pinTEMP, INPUT);
   pinMode(pinPowerState, INPUT);
+  pinMode(pinFanState, INPUT);
+  pinMode(pinTPS, INPUT);
+
 }
 
 //Arduino Loop
