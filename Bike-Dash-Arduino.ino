@@ -7,7 +7,7 @@
 //GPS and HW Serial Speed
 static const uint32_t GPSBaud = 9600, HWSerialBaud = 115200;
 //Pins for inputs/outputs/sofware serial
-static const int pinPowerState = 6, pinRPI = 7, pinMODE = 5, pinTEMP = A3, RXPin = 4, TXPin = 3, pinFanState = 10, pinTPS = A2;
+static const int pinPowerState = 5, pinRPI = 6, pinMODE = 7, pinTEMP = A3, RXPin = 4, TXPin = 3, pinFanState = 10, pinTPS = A2;
 //default mode is 1
 int currentMode = 1;
 
@@ -49,7 +49,20 @@ String getTPS() {
 
 //TODO:Power Management
 boolean isBikeOn() {
-  return (digitalRead(pinPowerState) == LOW);
+  boolean pulseRPI = false;
+
+  if(!digitalRead(pinPowerState)) {
+    if(!pulseRPI) {
+      digitalWrite(pinRPI, LOW);
+      delay(100);
+      pulseRPI = true;
+    }
+    return true;
+  }
+  else {
+    pulseRPI = false;
+    return false;
+  }
 }
 
 //build time string from GPS
