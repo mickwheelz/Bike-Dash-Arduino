@@ -3,11 +3,15 @@
 #include <ArduinoJson.h>
 #include <FreqMeasure.h>
 #include <AnalogSmooth.h>
+#include <Average.h>
+
+#define NUMSAMPLES 200
+
 
 //GPS and HW Serial Speed
 static const uint32_t GPSBaud = 9600, HWSerialBaud = 115200;
 //Pins for inputs/outputs/sofware serial
-static const int pinPowerState = 6, pinRPI = 7, pinMODE = 5, pinTEMP = A3, RXPin = 4, TXPin = 3, pinFanState = 10, pinTPS = A2;
+static const int pinPowerState = 5, pinRPI = 6, pinMODE = 7, pinTEMP = A3, RXPin = 3, TXPin = 4;
 //default mode is 1
 int currentMode = 1;
 
@@ -16,7 +20,8 @@ TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
 
 //Smoothing Lib
-AnalogSmooth as = AnalogSmooth();
+//AnalogSmooth asRpm = AnalogSmooth();
+AnalogSmooth asTemp = AnalogSmooth(100);
 
 // This custom version of delay() ensures that the gps object is always being fed
 static void smartDelay(unsigned long ms) {
@@ -29,27 +34,48 @@ static void smartDelay(unsigned long ms) {
 
 //RPM of bike, TBD
 String getRPM() {
-  return String(0);
-}
+  if (FreqMeasure.available()) {
+  int i = 0;
+  int rawVal[NUMSAMPLES];
 
+  for (i = 0; i < NUMSAMPLES; i++) {
+    float frequency = FreqMeasure.countToFrequency(FreqMeasure.read());
+    rawVal[i] = frequency * 30;
+  }
+
+  swapsort(rawVal, NUMSAMPLES);
+  
+  // drop the lowest 25% and highest 25% of the readings
+  long finalRPM = 0;
+  for (i = NUMSAMPLES / 4; i < (NUMSAMPLES * 3 / 4); i++) {
+    finalRPM += rawVal[i];
+  }
+  finalRPM /= (NUMSAMPLES / 2);
+  return (String(finalRPM));  
+  }
+  else {
+      return String(0);  
+  }
+}
+ 
 //Temperature of bike, measured using bike temp sensor and voltage divider to ADC
 String getTemp() {
   //at 100deg c, honda cb600 sensor returns 740... factor is 7.4
   float tempState = 1023 - analogRead(pinTEMP);
-  float smoothTemp = as.smooth(tempState) / 7.4;
+  float smoothTemp = asTemp.smooth(tempState) / 7.4;
   return String(smoothTemp);
-}
-
-//Throtle position of bike in percent
-String getTPS() {
-  float tpsState = analogRead(pinTPS);
-  float smoothTPS = (as.smooth(tpsState) / 1023) * 100;
-  return String(smoothTPS);
 }
 
 //TODO:Power Management
 boolean isBikeOn() {
-  return (digitalRead(pinPowerState) == LOW);
+  boolean bikeOn = digitalRead(pinPowerState);
+  if(bikeOn) {
+    digitalWrite(pinRPI, LOW);
+  }
+  else {
+      digitalWrite(pinRPI, HIGH);
+  }
+  return true;
 }
 
 //build time string from GPS
@@ -65,10 +91,6 @@ String buildTime(int offset) {
 
   return hour + ":" + minute + ":" + second;
 
-}
-
-boolean isFanOn() {
-    return (digitalRead(pinFanState) == HIGH);
 }
 
 //build the JSON object to be sent over serial
@@ -89,15 +111,13 @@ JsonObject& buildJSON() {
 
   gpsData["LAT"] = String(gps.location.lat(),6); 
   gpsData["LNG"] = String(gps.location.lng(),6);
-  gpsData["MPH"] = String(gps.speed.mph(),6); //String((random(1, 99) / 100.0) + random(1,100));//
+  gpsData["MPH"] = String(gps.speed.mph(),6); //String((random(1, 99) / 100.0) + random(1,100));
   gpsData["KPH"] = String(gps.speed.kmph(),6);
 
   JsonObject& bikeData = root.createNestedObject("bikeData");
   bikeData["RPM"] = getRPM();
   bikeData["Temp"] = getTemp(); //String((random(1, 99) / 100.0) + random(1,100));
   bikeData["Power"] = isBikeOn();
-  bikeData["Fan"] = isFanOn();
-  bikeData["TPS"] = getTPS();
 
   return root;
 }
@@ -113,9 +133,24 @@ void setup() {
   pinMode(pinMODE, INPUT);
   pinMode(pinTEMP, INPUT);
   pinMode(pinPowerState, INPUT);
-  pinMode(pinFanState, INPUT);
-  pinMode(pinTPS, INPUT);
+}
 
+void swapsort(int *sorted, int num) {
+  boolean done = false;    // flag to know when we're done sorting              
+  int j = 0;
+  int temp = 0;
+
+  while(!done) {           // simple swap sort, sorts numbers from lowest to highest
+    done = true;
+    for (j = 0; j < (num - 1); j++) {
+      if (sorted[j] > sorted[j + 1]){     // numbers are out of order - swap
+        temp = sorted[j + 1];
+        sorted [j+1] =  sorted[j] ;
+        sorted [j] = temp;
+        done = false;
+      }
+    }
+  }
 }
 
 //Arduino Loop
