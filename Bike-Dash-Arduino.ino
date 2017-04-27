@@ -3,21 +3,22 @@
 #include <ArduinoJson.h>
 #include <FreqMeasure.h>
 #include <AnalogSmooth.h>
-#include <Average.h>
+//#include <Average.h>
 
-#define NUMSAMPLES 200
-
+#define NUMSAMPLES 25
 
 //GPS and HW Serial Speed
 static const uint32_t GPSBaud = 9600, HWSerialBaud = 115200;
 //Pins for inputs/outputs/sofware serial
-<<<<<<< HEAD
 static const int pinPowerState = 5, pinRPI = 6, pinMODE = 7, pinTEMP = A3, RXPin = 3, TXPin = 4;
-=======
-static const int pinPowerState = 5, pinRPI = 6, pinMODE = 7, pinTEMP = A3, RXPin = 4, TXPin = 3, pinFanState = 10, pinTPS = A2;
->>>>>>> origin/master
+
 //default mode is 1
 int currentMode = 1;
+
+//RPM array
+int rpmArray[10];
+double sum=0;
+int count=0;
 
 //GPS Objects
 TinyGPSPlus gps;
@@ -39,27 +40,15 @@ static void smartDelay(unsigned long ms) {
 //RPM of bike, TBD
 String getRPM() {
   if (FreqMeasure.available()) {
-  int i = 0;
-  int rawVal[NUMSAMPLES];
-
-  for (i = 0; i < NUMSAMPLES; i++) {
-    float frequency = FreqMeasure.countToFrequency(FreqMeasure.read());
-    rawVal[i] = frequency * 30;
+    rpmArray[count] = (int)FreqMeasure.countToFrequency(FreqMeasure.read()) * 30; 
+    count = count + 1;
+    if (count > 10) {
+      swapsort(rpmArray, 10);
+      sum = 0;
+      count = 0;
+    }
   }
-
-  swapsort(rawVal, NUMSAMPLES);
-  
-  // drop the lowest 25% and highest 25% of the readings
-  long finalRPM = 0;
-  for (i = NUMSAMPLES / 4; i < (NUMSAMPLES * 3 / 4); i++) {
-    finalRPM += rawVal[i];
-  }
-  finalRPM /= (NUMSAMPLES / 2);
-  return (String(finalRPM));  
-  }
-  else {
-      return String(0);  
-  }
+  return String(rpmArray[5]);
 }
  
 //Temperature of bike, measured using bike temp sensor and voltage divider to ADC
@@ -72,7 +61,6 @@ String getTemp() {
 
 //TODO:Power Management
 boolean isBikeOn() {
-<<<<<<< HEAD
   boolean bikeOn = digitalRead(pinPowerState);
   if(bikeOn) {
     digitalWrite(pinRPI, LOW);
@@ -81,22 +69,6 @@ boolean isBikeOn() {
       digitalWrite(pinRPI, HIGH);
   }
   return true;
-=======
-  boolean pulseRPI = false;
-
-  if(!digitalRead(pinPowerState)) {
-    if(!pulseRPI) {
-      digitalWrite(pinRPI, LOW);
-      delay(100);
-      pulseRPI = true;
-    }
-    return true;
-  }
-  else {
-    pulseRPI = false;
-    return false;
-  }
->>>>>>> origin/master
 }
 
 //build time string from GPS
@@ -156,22 +128,16 @@ void setup() {
   pinMode(pinPowerState, INPUT);
 }
 
-void swapsort(int *sorted, int num) {
-  boolean done = false;    // flag to know when we're done sorting              
-  int j = 0;
-  int temp = 0;
-
-  while(!done) {           // simple swap sort, sorts numbers from lowest to highest
-    done = true;
-    for (j = 0; j < (num - 1); j++) {
-      if (sorted[j] > sorted[j + 1]){     // numbers are out of order - swap
-        temp = sorted[j + 1];
-        sorted [j+1] =  sorted[j] ;
-        sorted [j] = temp;
-        done = false;
-      }
+void swapsort(int a[], int size) {
+    for(int i=0; i<(size-1); i++) {
+        for(int o=0; o<(size-(i+1)); o++) {
+                if(a[o] > a[o+1]) {
+                    int t = a[o];
+                    a[o] = a[o+1];
+                    a[o+1] = t;
+                }
+        }
     }
-  }
 }
 
 //Arduino Loop
